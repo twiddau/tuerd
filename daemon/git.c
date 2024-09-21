@@ -193,6 +193,28 @@ enum rfid_key_cb_result get_key_git(const char *uid, struct rfid_key *key_out) {
 		goto obj_out;
 	}
 
+	json_t *picc_key = json_object_get(obj, "picc_key");
+	if(!picc_key) {
+		debug("picc_key not found");
+		goto obj_out;
+	}
+
+	const char *picc_keystr = json_string_value(picc_key);
+	if(!picc_keystr) {
+		debug("picc_key is not a string");
+		goto obj_out;
+	}
+
+	if(strlen(picc_keystr) != 32) {
+		debug("picc_key has the wrong length");
+		goto obj_out;
+	}
+
+        if(parse_key (key_out->picc_key, picc_keystr) < 0) {
+		debug("Parsing picc_key failed");
+		goto obj_out;
+	}
+
 	ret = TAG_ALLOWED;
 obj_out:
 	json_decref(obj);

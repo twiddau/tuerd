@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include <nfc/nfc.h>
 #include <freefare.h>
@@ -11,9 +12,27 @@
 
 #define LOG_SECTION "rfid"
 #define NFC_MAX_DEVICES 8
+#define KABA_ID 0xF52100
 
 nfc_context *nfc_ctx;
 MifareDESFireAID door_aid;
+
+static int parse_key(uint8_t key[static 16], const char *data) {
+	if(!data || strlen(data) != 32)
+		return -1;
+
+	for(int i=0; i < 16; i++) {
+		char buf[3];
+		buf[0] = (char) tolower(data[2 * i]);
+		buf[1] = (char) tolower(data[2 * i + 1]);
+		buf[2] = 0;
+
+		sscanf(buf, "%hhx", &key[i]);
+	}
+
+	return 0;
+}
+
 
 nfc_device *rfid_init(void) {
 	nfc_init(&nfc_ctx);
@@ -125,6 +144,115 @@ static bool rfid_authenticate(FreefareTag tag, struct rfid_key *key) {
 
 	if(ret == 0)
 		result = true;
+
+
+	bool provision_dk = true;
+	
+    MifareDESFireAID *aids = NULL;
+    size_t aid_count;
+
+	ret = mifare_desfire_get_application_ids(tag, &aids, &aid_count);
+    for (size_t i=0; i<aid_count;i++) {
+		if (mifare_desfire_aid_get_aid(aids[1]) == KABA_ID) {
+			provision_dk = false;
+		}
+	}
+
+
+	if (provision_dk) {
+		MifareDESFireKey picc_key = mifare_desfire_3des_key_new(key->picc_key);
+
+		ret = mifare_desfire_authenticate(tag, 0, picc_key);
+		if(ret < 0) {
+			log("authentication with PICC failed");
+			goto out_key;
+		}
+		
+		MifareDESFireAID aid = mifare_desfire_aid_new(KABA_ID);
+		ret = mifare_desfire_create_application(tag, aid, 0x0F, 2);
+		if(ret < 0) {
+			log("create kaba application failed");
+			goto out_key;
+		}
+		
+		ret = mifare_desfire_select_application(tag, aid);
+		if(ret < 0) {
+			log("select kaba authentication failed");
+			goto out_key;
+		}
+		
+		ret = mifare_desfire_create_std_data_file(     tag,  0, MDCM_MACED, MDAR(1,0,0,0),     32);
+		if(ret < 0) {
+			log("create std file 0 failed");
+			goto out_key;
+		}
+		
+		ret = mifare_desfire_create_backup_data_file(  tag,  3, MDCM_PLAIN, MDAR(MDAR_FREE,0,0,0),     32);
+		if(ret < 0) {
+			log("create backup data file 3 failed");
+			goto out_key;
+		}
+
+		ret = mifare_desfire_create_std_data_file(     tag,  2, MDCM_MACED, MDAR(1,0,0,0),    192);
+		if(ret < 0) {
+			log("create std data file 2 failed");
+			goto out_key;
+		}
+		
+		ret = mifare_desfire_create_cyclic_record_file(tag,  1, MDCM_PLAIN, MDAR(1,0,0,0), 8, 61);
+		if(ret < 0) {
+			log("create cyclic record data file 1 failed");
+			goto out_key;
+		}
+
+		ret = mifare_desfire_create_backup_data_file(  tag,  4, MDCM_PLAIN, MDAR(MDAR_FREE,0,0,0),    64);
+		if(ret < 0) {
+			log("create backup data file 4 failed");
+			goto out_key;
+		}
+
+		char *uid;
+		ret = mifare_desfire_get_card_uid(tag, &uid);
+		if(ret < 0) {
+			log("retrieve uid for card data failed.");
+			goto out_key;
+		}
+
+		char data[20];
+		strcat(data, "04");
+		strcat(data, "0000000000");
+		strcat(data, uid);
+		ret = mifare_desfire_write_data(tag, 0, 0, sizeof(data), data);
+		if(ret < 0) {
+			log("write data to file 0 failed");
+			goto out_key;
+
+		}
+
+		const char *fabkey = getenv("FABKEY");
+		uint8_t raw_fabkey[16];
+		parse_key(raw_fabkey, fabkey);
+		MifareDESFireKey mf_fabkey = mifare_desfire_3des_key_new(raw_fabkey);
+
+		ret = mifare_desfire_change_key(tag, MDAR_KEY0, mf_fabkey, mf_fabkey);
+			if(ret < 0) {
+			log("set key 0 in kaba app failed");
+			goto out_key;
+		}
+
+
+		const char *rokey = getenv("ROKEY");
+		uint8_t raw_rokey[16];
+		parse_key(raw_rokey, rokey);
+		MifareDESFireKey mf_rokey = mifare_desfire_3des_key_new(raw_rokey);
+
+		ret = mifare_desfire_change_key(tag, MDAR_KEY0, mf_rokey, mf_rokey);
+		if(ret < 0) {
+			log("set key 1 in kaba app failed");
+			goto out_key;
+		}
+	}
+
 
 out_key:
 	mifare_desfire_key_free(dfkey);

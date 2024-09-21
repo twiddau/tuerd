@@ -6,6 +6,7 @@
 
 struct rfid_key {
 	uint8_t key[16];
+	uint8_t picc_key[16];
 };
 
 enum rfid_key_cb_result {
