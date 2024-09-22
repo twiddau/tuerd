@@ -159,7 +159,7 @@ static bool rfid_authenticate(FreefareTag tag, struct rfid_key *key) {
 
 	ret = mifare_desfire_get_application_ids(tag, &aids, &aid_count);
 	log("AID count: %lu", aid_count);
-	
+
     for (size_t i=0; i < aid_count;i++) {
 		uint32_t aid = mifare_desfire_aid_get_aid(aids[i]);
 
@@ -187,7 +187,7 @@ static bool rfid_authenticate(FreefareTag tag, struct rfid_key *key) {
 		log("authenticaed with PICC key");
 		
 		uint8_t picc_settings = MDMK_SETTINGS(1,1,1,1);
-    	result = mifare_desfire_change_key_settings(tag, picc_settings);
+    	ret = mifare_desfire_change_key_settings(tag, picc_settings);
 		if(ret < 0) {
 			log("change card settings to (1,1,1,1) failed.");
 			goto out_key;
@@ -297,16 +297,16 @@ static bool rfid_authenticate(FreefareTag tag, struct rfid_key *key) {
 		strncpy(extracted, uid + 2, 8);
 		extracted[8] = '\0';
 
-		uint8_t result[11] = {0x04}; 
+		uint8_t filedata[11] = {0x04}; 
 		for (int i = 1; i < 11; i++) {
-			result[i] = 0x00;
+			filedata[i] = 0x00;
 		}
 
 		for (int i = 0; i < 4; i++) {
-			sscanf(extracted + 2*i, "%2hhx", &result[7 + i]);
+			sscanf(extracted + 2*i, "%2hhx", &filedata[7 + i]);
 		}
 
- 		ret = mifare_desfire_write_data(tag, 0, 0, sizeof(result), result);
+ 		ret = mifare_desfire_write_data(tag, 0, 0, sizeof(filedata), filedata);
 		if(ret < 0) {
 			log("write data to file 0 failed");
 			goto out_app;
