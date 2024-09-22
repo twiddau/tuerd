@@ -5,6 +5,7 @@
 #include <nfc/nfc.h>
 
 struct rfid_key {
+    uint8_t uid[8];
 	uint8_t key[16];
 	uint8_t picc_key[16];
 };

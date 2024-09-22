@@ -33,6 +33,8 @@ static int check_lg2(int error, const char *message) {
 static int read_file_git(const char *repo_path, const char *name, void **out, size_t *outlen) {
 	int ret, retcode = -1;
 
+    git_libgit2_init();
+
 	git_repository *repo;
 	ret = git_repository_open_bare(&repo, repo_path);
 	if(check_lg2(ret, "opening repo"))

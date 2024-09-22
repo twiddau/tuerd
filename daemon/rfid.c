@@ -162,96 +162,137 @@ static bool rfid_authenticate(FreefareTag tag, struct rfid_key *key) {
 	if (provision_dk) {
 		MifareDESFireKey picc_key = mifare_desfire_3des_key_new(key->picc_key);
 
+        ret = mifare_desfire_select_application(tag, 0x00);
+        if(ret < 0) {
+            log("select PICC application failed");
+            goto out_key;
+        }
+		log("select picc key");
+
 		ret = mifare_desfire_authenticate(tag, 0, picc_key);
 		if(ret < 0) {
 			log("authentication with PICC failed");
 			goto out_key;
 		}
+		log("authenticaed with PICC key");
 		
+
 		MifareDESFireAID aid = mifare_desfire_aid_new(KABA_ID);
-		ret = mifare_desfire_create_application(tag, aid, 0x0F, 2);
+
+    	uint8_t app_settings = MDAPP_SETTINGS(MDAR_KEY0, 1, 0, 0, 1);
+		ret = mifare_desfire_create_application(tag, aid, app_settings, 2);
 		if(ret < 0) {
 			log("create kaba application failed");
-			goto out_key;
+			goto out_app;
 		}
-		
+        log("kaba: created application");
+
 		ret = mifare_desfire_select_application(tag, aid);
 		if(ret < 0) {
-			log("select kaba authentication failed");
-			goto out_key;
+			log("select kaba application failed");
+			goto out_app;
 		}
-		
-		ret = mifare_desfire_create_std_data_file(     tag,  0, MDCM_MACED, MDAR(1,0,0,0),     32);
-		if(ret < 0) {
-			log("create std file 0 failed");
-			goto out_key;
-		}
-		
-		ret = mifare_desfire_create_backup_data_file(  tag,  3, MDCM_PLAIN, MDAR(MDAR_FREE,0,0,0),     32);
-		if(ret < 0) {
-			log("create backup data file 3 failed");
-			goto out_key;
-		}
-
-		ret = mifare_desfire_create_std_data_file(     tag,  2, MDCM_MACED, MDAR(1,0,0,0),    192);
-		if(ret < 0) {
-			log("create std data file 2 failed");
-			goto out_key;
-		}
-		
-		ret = mifare_desfire_create_cyclic_record_file(tag,  1, MDCM_PLAIN, MDAR(1,0,0,0), 8, 61);
-		if(ret < 0) {
-			log("create cyclic record data file 1 failed");
-			goto out_key;
-		}
-
-		ret = mifare_desfire_create_backup_data_file(  tag,  4, MDCM_PLAIN, MDAR(MDAR_FREE,0,0,0),    64);
-		if(ret < 0) {
-			log("create backup data file 4 failed");
-			goto out_key;
-		}
-
-		char *uid;
-		ret = mifare_desfire_get_card_uid(tag, &uid);
-		if(ret < 0) {
-			log("retrieve uid for card data failed.");
-			goto out_key;
-		}
-
-		char data[20];
-		strcat(data, "04");
-		strcat(data, "0000000000");
-		strcat(data, uid);
-		ret = mifare_desfire_write_data(tag, 0, 0, sizeof(data), data);
-		if(ret < 0) {
-			log("write data to file 0 failed");
-			goto out_key;
-
-		}
+        log("kaba: application selected");
 
 		const char *fabkey = getenv("FABKEY");
 		uint8_t raw_fabkey[16];
 		parse_key(raw_fabkey, fabkey);
 		MifareDESFireKey mf_fabkey = mifare_desfire_3des_key_new(raw_fabkey);
 
-		ret = mifare_desfire_change_key(tag, MDAR_KEY0, mf_fabkey, mf_fabkey);
-			if(ret < 0) {
-			log("set key 0 in kaba app failed");
+ 		uint8_t default_key[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+		MifareDESFireKey default_master_key_des = mifare_desfire_des_key_new(default_key);			
+
+		ret = mifare_desfire_authenticate(tag, MDAR_KEY0, default_master_key_des);
+		if(ret < 0) {
+			log("authentication with default AMK failed");
 			goto out_key;
 		}
+		log("kaba: authenticated with default AMK key");
 
 
+		ret = mifare_desfire_change_key(tag, MDAR_KEY0, mf_fabkey, default_master_key_des);
+        if(ret < 0) {
+			log("set key 0 in kaba app failed");
+			goto out_app;
+		}
+        log("kaba: key 0 (fab) set");
+
+
+		ret = mifare_desfire_authenticate(tag, MDAR_KEY0, mf_fabkey);
+		if(ret < 0) {
+			log("authentication with Fab-Key failed");
+			goto out_key;
+		}
+		log("kaba: authenticated with Fab-Key");
+			
 		const char *rokey = getenv("ROKEY");
 		uint8_t raw_rokey[16];
 		parse_key(raw_rokey, rokey);
 		MifareDESFireKey mf_rokey = mifare_desfire_3des_key_new(raw_rokey);
 
-		ret = mifare_desfire_change_key(tag, MDAR_KEY0, mf_rokey, mf_rokey);
+		ret = mifare_desfire_change_key(tag, MDAR_KEY1, mf_rokey, default_master_key_des);
 		if(ret < 0) {
 			log("set key 1 in kaba app failed");
-			goto out_key;
+			goto out_app;
 		}
+        log("kaba: key 1 (ro) set");
+		
+	
+		ret = mifare_desfire_create_std_data_file(     tag,  0, MDCM_MACED, MDAR(1,0,0,0),     32);
+		if(ret < 0) {
+			log("create std file 0 failed");
+			goto out_app;
+		}
+        log("kaba: created std data file 0");
+		
+		ret = mifare_desfire_create_backup_data_file(  tag,  3, MDCM_PLAIN, MDAR(MDAR_FREE,0,0,0),     32);
+		if(ret < 0) {
+			log("create backup data file 3 failed");
+			goto out_app;
+		}
+        log("kaba: created backup data file 3");
+
+		ret = mifare_desfire_create_std_data_file(     tag,  2, MDCM_MACED, MDAR(1,0,0,0),    192);
+		if(ret < 0) {
+			log("create std data file 2 failed");
+			goto out_app;
+		}
+        log("kaba: created std data file 2");
+		
+		ret = mifare_desfire_create_cyclic_record_file(tag,  1, MDCM_PLAIN, MDAR(1,0,0,0), 8, 61);
+		if(ret < 0) {
+			log("create cyclic record data file 1 failed");
+			goto out_app;
+		}
+        log("kaba: created cyclic record data file 1");
+
+		ret = mifare_desfire_create_backup_data_file(  tag,  4, MDCM_PLAIN, MDAR(MDAR_FREE,0,0,0),    64);
+		if(ret < 0) {
+			log("create backup data file 4 failed");
+			goto out_app;
+		}
+        log("kaba: created backup data file 4");
+
+		char *uid = freefare_get_tag_uid(tag);
+
+		char cid[8];
+		strncpy(cid, uid + 2, 8);
+
+		/*uint8_t data[32] = {0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
+ 		ret = mifare_desfire_write_data(tag, 0, 0, sizeof(data), data);
+		if(ret < 0) {
+			log("write data to file 0 failed");
+			goto out_app;
+
+		}*/
+        log("kaba: wrote CID to file 0");
+        log("kaba: done");
+
+		out_app:
+			free(aid);
 	}
+
+
 
 
 out_key:
