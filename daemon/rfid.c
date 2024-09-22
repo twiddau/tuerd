@@ -151,9 +151,19 @@ static bool rfid_authenticate(FreefareTag tag, struct rfid_key *key) {
     MifareDESFireAID *aids = NULL;
     size_t aid_count;
 
+    ret = mifare_desfire_select_application(tag, 0x00);
+    if(ret < 0) {
+        log("select PICC application failed");
+        goto out_key;
+    }
+
 	ret = mifare_desfire_get_application_ids(tag, &aids, &aid_count);
-    for (size_t i=0; i<aid_count;i++) {
-		if (mifare_desfire_aid_get_aid(aids[1]) == KABA_ID) {
+	log("AID count: %lu", aid_count);
+	
+    for (size_t i=0; i < aid_count;i++) {
+		uint32_t aid = mifare_desfire_aid_get_aid(aids[i]);
+
+		if ((int) aid == KABA_ID) {
 			provision_dk = false;
 		}
 	}
@@ -176,10 +186,17 @@ static bool rfid_authenticate(FreefareTag tag, struct rfid_key *key) {
 		}
 		log("authenticaed with PICC key");
 		
+		uint8_t picc_settings = MDMK_SETTINGS(1,1,1,1);
+    	result = mifare_desfire_change_key_settings(tag, picc_settings);
+		if(ret < 0) {
+			log("change card settings to (1,1,1,1) failed.");
+			goto out_key;
+		}
+		log("changed card settings to (1,1,1,1)");
 
 		MifareDESFireAID aid = mifare_desfire_aid_new(KABA_ID);
 
-    	uint8_t app_settings = MDAPP_SETTINGS(MDAR_KEY0, 1, 0, 0, 1);
+    	uint8_t app_settings = MDAPP_SETTINGS(MDAR_KEY0, 1, 1, 1, 1);
 		ret = mifare_desfire_create_application(tag, aid, app_settings, 2);
 		if(ret < 0) {
 			log("create kaba application failed");
@@ -275,16 +292,26 @@ static bool rfid_authenticate(FreefareTag tag, struct rfid_key *key) {
 
 		char *uid = freefare_get_tag_uid(tag);
 
-		char cid[8];
-		strncpy(cid, uid + 2, 8);
+		char extracted[9];
 
-		/*uint8_t data[32] = {0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
- 		ret = mifare_desfire_write_data(tag, 0, 0, sizeof(data), data);
+		strncpy(extracted, uid + 2, 8);
+		extracted[8] = '\0';
+
+		uint8_t result[11] = {0x04}; 
+		for (int i = 1; i < 11; i++) {
+			result[i] = 0x00;
+		}
+
+		for (int i = 0; i < 4; i++) {
+			sscanf(extracted + 2*i, "%2hhx", &result[7 + i]);
+		}
+
+ 		ret = mifare_desfire_write_data(tag, 0, 0, sizeof(result), result);
 		if(ret < 0) {
 			log("write data to file 0 failed");
 			goto out_app;
 
-		}*/
+		}
         log("kaba: wrote CID to file 0");
         log("kaba: done");
 
