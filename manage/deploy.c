@@ -352,7 +352,7 @@ int main(int argc, char **argv)
     printf("}\n");
 
     /****** Set Key Settings ******/
-    uint8_t picc_settings = MDMK_SETTINGS(1, 0, 0, 1);
+    uint8_t picc_settings = MDMK_SETTINGS(1, 1, 1, 1);
     result = mifare_desfire_change_key_settings(tag, picc_settings);
 
     if (result < 0)
