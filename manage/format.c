@@ -218,54 +218,6 @@ int main(int argc, char **argv) {
     print_buffer(stdout, default_master_key, 16);
     printf("\n");
 
-    result = mifare_desfire_authenticate(tag, MDAR_KEY0, default_master_key_des);
-
-    if (result < 0) {
-        freefare_perror(tag, "Error authenticating with default key");
-        _error = EXIT_FAILURE; goto CLOSE;
-    }
-
-	result = mifare_desfire_change_key_settings(tag, 0x0F);
-	if (result < 0)
-		freefare_perror(tag, "ChangeKeySettings failed");
-
-
-    MifareDESFireAID app_aid = mifare_desfire_aid_new(0x2305CA);
-    
-	result = mifare_desfire_delete_application(tag, app_aid);
-	if (result < 0)
-		freefare_perror(tag, "DeleteApplication failed");
-    
-    uint8_t app_settings = MDAPP_SETTINGS(MDAR_KEY0, 1, 0, 1, 1);
-
-    result = mifare_desfire_create_application(tag, app_aid, app_settings, MDAR_FREE);
-    if (result < 0) {
-        freefare_perror(tag, "Creating application failed");
-        mifare_desfire_format_picc(tag);
-        _error = EXIT_FAILURE; goto CLOSE;
-    }
-
-
-    result = mifare_desfire_select_application(tag, app_aid);
-    if (result < 0) {
-        freefare_perror(tag, "Selecting application failed");
-        _error = EXIT_FAILURE; goto CLOSE;
-    }
-
-    MifareDESFireKey new_app_key_des = mifare_desfire_des_key_new(default_key);    
-    result = mifare_desfire_change_key(tag, MDAR_KEY0, new_app_key_des, new_app_key_des);
-
-    if (result < 0) {
-        freefare_perror(tag, "Error setting application key 0");
-        _error = EXIT_FAILURE; goto CLOSE;
-    }
-
-    result = mifare_desfire_change_key(tag, MDAR_KEY13, new_app_key_des, new_app_key_des);
-    if (result < 0) {
-        freefare_perror(tag, "Error setting application key 13");
-        _error = EXIT_FAILURE; goto CLOSE;
-    }
-    
 
 result = mifare_desfire_select_application(tag, mifare_desfire_aid_new(0x0));
 if (result < 0) {

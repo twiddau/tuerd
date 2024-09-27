@@ -27,7 +27,7 @@ let
     };
 
     nativeBuildInputs = [ pkgs.autoreconfHook pkgs.pkg-config ];
-    buildInputs = [ pkgs.openssl ] ++ pkgs.lib.optional pkgs.stdenv.isDarwin pkgs.libobjc;
+    buildInputs = [ pkgs.openssl ] ++ pkgs.lib.optional pkgs.stdenv.isDarwin pkgs.darwin.libobjc;
     propagatedBuildInputs = [ libnfc ];
   };
 in
