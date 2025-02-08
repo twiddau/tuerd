@@ -3,6 +3,10 @@ daemon/tuerd
 manage/deploy
 manage/deploy_log
 manage/read_uid
+manage/fix
+manage/format
+manage/prepare-dk
+manage/prepare_log
 
 CMakeLists.txt
 .idea/
